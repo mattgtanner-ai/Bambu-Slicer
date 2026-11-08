@@ -1,0 +1,6 @@
+{
+  "name": "CarbonSlice X1 — Bambu X1 Carbon Slicer & Print Studio",
+  "description": "Streamlined 3MF/STL 3D slicer, G-code layer inspector, wireless LAN print dispatcher, live chamber camera feed, and automated filament & print alert center for Bambu Lab X1 Carbon.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
