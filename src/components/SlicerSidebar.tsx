@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import type {
   AmsSlot,
+  BambuPrinterModelId,
   BuildPlate,
   FilamentProfile,
   InfillPattern,
@@ -24,7 +25,12 @@ import type {
   SupportType,
 } from '../types/slicer';
 import { PRESET_MODELS_CATALOG } from '../utils/proceduralModels';
-import { getScaledDimensions, validatePlateBounds } from '../utils/slicerEngine';
+import {
+  BAMBU_PRINTER_MODELS_CATALOG,
+  getBambuPrinterModelSpec,
+  getScaledDimensions,
+  validatePlateBounds,
+} from '../utils/slicerEngine';
 
 interface SlicerSidebarProps {
   plates: BuildPlate[];
@@ -44,6 +50,7 @@ interface SlicerSidebarProps {
   onOpenProfilesTab: () => void;
   settings: SlicerProcessSettings;
   onUpdateSettings: (patch: Partial<SlicerProcessSettings>) => void;
+  onSelectPrinterModel?: (model: BambuPrinterModelId) => void;
   objects: PlateObject[];
   selectedObjectId: string | null;
   onSelectObject: (id: string) => void;
@@ -78,6 +85,7 @@ export const SlicerSidebar: React.FC<SlicerSidebarProps> = ({
   onOpenProfilesTab,
   settings,
   onUpdateSettings,
+  onSelectPrinterModel,
   objects,
   selectedObjectId,
   onSelectObject,
@@ -100,6 +108,7 @@ export const SlicerSidebar: React.FC<SlicerSidebarProps> = ({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const selectedObj = objects.find((o) => o.id === selectedObjectId) || null;
+  const printerSpec = getBambuPrinterModelSpec(settings.printerModel);
 
   return (
     <aside
@@ -235,9 +244,50 @@ export const SlicerSidebar: React.FC<SlicerSidebarProps> = ({
             <span className="text-xs font-semibold text-slate-200">
               Printer & Plate Configuration
             </span>
-            <span className="text-[11px] font-mono text-emerald-400">
-              256×256×256 mm
+            <span
+              data-testid="sidebar-build-volume-badge"
+              className="text-[11px] font-mono text-emerald-400"
+            >
+              {printerSpec.buildVolume.x}×{printerSpec.buildVolume.y}×{printerSpec.buildVolume.z} mm
             </span>
+          </div>
+
+          <div>
+            <label
+              htmlFor="printer-model-select"
+              className="block text-[11px] text-slate-400 mb-1"
+            >
+              Bambu Lab Printer Model
+            </label>
+            <select
+              id="printer-model-select"
+              aria-label="Bambu Lab Printer Model"
+              value={printerSpec.id}
+              onChange={(e) => {
+                const chosen = e.target.value as BambuPrinterModelId;
+                if (onSelectPrinterModel) {
+                  onSelectPrinterModel(chosen);
+                } else {
+                  onUpdateSettings({ printerModel: chosen });
+                }
+              }}
+              className="w-full px-2.5 py-1.5 text-xs font-medium bg-slate-950 border border-slate-800 rounded-lg text-slate-100 focus:outline-none focus:border-emerald-500"
+            >
+              {BAMBU_PRINTER_MODELS_CATALOG.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.id} ({m.buildVolume.x}×{m.buildVolume.y}×{m.buildVolume.z}mm · {m.series})
+                </option>
+              ))}
+            </select>
+            <div className="mt-1.5 px-2.5 py-1.5 rounded-lg bg-slate-950/90 border border-slate-800/80 text-[11px] font-mono text-slate-400 flex flex-wrap items-center justify-between gap-1">
+              <span className="text-slate-300">{printerSpec.kinematics}</span>
+              <span>
+                Max {printerSpec.maxNozzleTempC}°C / Bed {printerSpec.maxBedTempC}°C
+              </span>
+              <span className="text-emerald-400">
+                {printerSpec.hasMicroLidar ? 'Micro-LiDAR' : printerSpec.amsSupportLabel.split(' ')[0]}
+              </span>
+            </div>
           </div>
 
           <div className="grid grid-cols-2 gap-2">
@@ -246,7 +296,7 @@ export const SlicerSidebar: React.FC<SlicerSidebarProps> = ({
                 htmlFor="nozzle-select"
                 className="block text-[11px] text-slate-400 mb-1"
               >
-                X1C Nozzle
+                {printerSpec.id.replace('Bambu Lab ', '')} Nozzle
               </label>
               <select
                 id="nozzle-select"
@@ -259,7 +309,7 @@ export const SlicerSidebar: React.FC<SlicerSidebarProps> = ({
                 className="w-full px-2.5 py-1.5 text-xs bg-slate-950 border border-slate-800 rounded-lg text-slate-100 focus:outline-none focus:border-emerald-500"
               >
                 <option value={0.2}>0.2mm Stainless</option>
-                <option value={0.4}>0.4mm Hardened</option>
+                <option value={0.4}>0.4mm {printerSpec.defaultNozzleMaterial.split(' ')[0]}</option>
                 <option value={0.6}>0.6mm Hardened</option>
                 <option value={0.8}>0.8mm Hardened</option>
               </select>
@@ -945,7 +995,7 @@ export const SlicerSidebar: React.FC<SlicerSidebarProps> = ({
                 const isSel = obj.id === selectedObjectId;
                 const slot = amsSlots.find((s) => s.id === obj.amsSlotId) || amsSlots[0];
                 const dims = getScaledDimensions(obj);
-                const bounds = validatePlateBounds(obj);
+                const bounds = validatePlateBounds(obj, printerSpec.buildVolume);
                 const objPlateId = obj.plateId ?? 1;
 
                 return (

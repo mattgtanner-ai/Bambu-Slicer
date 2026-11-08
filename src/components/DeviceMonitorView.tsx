@@ -23,13 +23,18 @@ import {
 import type {
   AmsSlot,
   BambuAccountProfile,
+  BambuPrinterModelId,
   PlateObject,
   PrintQueueItem,
   PrinterConnectionConfig,
   PrinterTelemetry,
   SpeedProfile,
 } from '../types/slicer';
-import { formatDuration } from '../utils/slicerEngine';
+import {
+  BAMBU_PRINTER_MODELS_CATALOG,
+  formatDuration,
+  getBambuPrinterModelSpec,
+} from '../utils/slicerEngine';
 import { renderChamberTimelapseFrame } from '../utils/timelapseGenerator';
 import { ChamberCameraCanvas } from './ChamberCameraCanvas';
 
@@ -85,6 +90,8 @@ export const DeviceMonitorView: React.FC<DeviceMonitorViewProps> = ({
   const [accessCodeInput, setAccessCodeInput] = useState(printerConfig.accessCode);
   const [serialInput, setSerialInput] = useState(printerConfig.serialNumber);
   const [connError, setConnError] = useState<string | null>(null);
+
+  const printerSpec = getBambuPrinterModelSpec(printerConfig.model);
 
   const [nozzleInput, setNozzleInput] = useState(String(telemetry.nozzleTempTarget));
   const [bedInput, setBedInput] = useState(String(telemetry.bedTempTarget));
@@ -188,7 +195,7 @@ export const DeviceMonitorView: React.FC<DeviceMonitorViewProps> = ({
 
   const applyNozzleTarget = () => {
     const val = Number(nozzleInput);
-    if (!Number.isNaN(val) && val >= 0 && val <= 300) {
+    if (!Number.isNaN(val) && val >= 0 && val <= printerSpec.maxNozzleTempC) {
       onUpdateTelemetry((prev) => ({
         ...prev,
         nozzleTempTarget: Math.round(val),
@@ -198,7 +205,7 @@ export const DeviceMonitorView: React.FC<DeviceMonitorViewProps> = ({
 
   const applyBedTarget = () => {
     const val = Number(bedInput);
-    if (!Number.isNaN(val) && val >= 0 && val <= 120) {
+    if (!Number.isNaN(val) && val >= 0 && val <= printerSpec.maxBedTempC) {
       onUpdateTelemetry((prev) => ({
         ...prev,
         bedTempTarget: Math.round(val),
@@ -222,11 +229,31 @@ export const DeviceMonitorView: React.FC<DeviceMonitorViewProps> = ({
               </span>
             </div>
             <p className="text-xs text-slate-400 mt-1 font-mono">
-              Model: {printerConfig.model} · IP: {printerConfig.lanIp} · SN: {printerConfig.serialNumber} · Nozzle: 0.4mm Hardened Steel
+              Model: {printerSpec.id} ({printerSpec.buildVolume.x}×{printerSpec.buildVolume.y}×{printerSpec.buildVolume.z}mm · {printerSpec.kinematics}) · IP: {printerConfig.lanIp} · SN: {printerConfig.serialNumber}
             </p>
           </div>
 
           <div className="flex items-center gap-3">
+            <select
+              aria-label="Select Active Bambu Printer Model"
+              value={printerSpec.id}
+              onChange={(e) => {
+                const nextModel = e.target.value as BambuPrinterModelId;
+                const nextSpec = getBambuPrinterModelSpec(nextModel);
+                onUpdatePrinterConfig({
+                  ...printerConfig,
+                  model: nextModel,
+                  printerName: `${nextSpec.id} — Studio Bay 01`,
+                });
+              }}
+              className="px-3 py-2 text-xs font-medium bg-slate-900 border border-slate-700 rounded-lg text-slate-100 focus:outline-none focus:border-emerald-500"
+            >
+              {BAMBU_PRINTER_MODELS_CATALOG.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.id} ({m.buildVolume.x}×{m.buildVolume.y}×{m.buildVolume.z}mm)
+                </option>
+              ))}
+            </select>
             {onOpenAccountModal && (
               <button
                 type="button"
@@ -835,10 +862,10 @@ export const DeviceMonitorView: React.FC<DeviceMonitorViewProps> = ({
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {/* Hardened Steel Nozzle Temperature */}
+                {/* Nozzle Temperature */}
                 <div className="p-3 bg-slate-950 border border-slate-800 rounded-lg space-y-1.5">
                   <div className="flex items-center justify-between text-xs text-slate-400">
-                    <span>Nozzle (300°C Max)</span>
+                    <span>Nozzle ({printerSpec.maxNozzleTempC}°C Max)</span>
                     <Flame className="w-3.5 h-3.5 text-orange-400" />
                   </div>
                   <div className="text-base font-mono font-bold text-slate-100 tabular-nums">
@@ -852,7 +879,7 @@ export const DeviceMonitorView: React.FC<DeviceMonitorViewProps> = ({
                       type="number"
                       aria-label="Target Nozzle Temperature"
                       min={0}
-                      max={300}
+                      max={printerSpec.maxNozzleTempC}
                       value={nozzleInput}
                       onChange={(e) => setNozzleInput(e.target.value)}
                       className="w-20 px-2 py-1 text-xs font-mono bg-slate-900 border border-slate-700 rounded text-slate-100"
@@ -867,10 +894,10 @@ export const DeviceMonitorView: React.FC<DeviceMonitorViewProps> = ({
                   </div>
                 </div>
 
-                {/* Textured PEI Build Plate Temperature */}
+                {/* Build Plate Temperature */}
                 <div className="p-3 bg-slate-950 border border-slate-800 rounded-lg space-y-1.5">
                   <div className="flex items-center justify-between text-xs text-slate-400">
-                    <span>Textured PEI Bed</span>
+                    <span>Build Bed ({printerSpec.maxBedTempC}°C Max)</span>
                     <Thermometer className="w-3.5 h-3.5 text-sky-400" />
                   </div>
                   <div className="text-base font-mono font-bold text-slate-100 tabular-nums">
@@ -884,7 +911,7 @@ export const DeviceMonitorView: React.FC<DeviceMonitorViewProps> = ({
                       type="number"
                       aria-label="Target Bed Temperature"
                       min={0}
-                      max={120}
+                      max={printerSpec.maxBedTempC}
                       value={bedInput}
                       onChange={(e) => setBedInput(e.target.value)}
                       className="w-20 px-2 py-1 text-xs font-mono bg-slate-900 border border-slate-700 rounded text-slate-100"

@@ -13,13 +13,18 @@ import {
   buildPlateObjectGroup,
   createBambuPeiPlateTextures,
 } from '../utils/proceduralModels';
-import { getScaledDimensions, validatePlateBounds } from '../utils/slicerEngine';
+import {
+  getBambuPrinterModelSpec,
+  getScaledDimensions,
+  validatePlateBounds,
+} from '../utils/slicerEngine';
 
 interface BuildPlateViewportProps {
   objects: PlateObject[];
   selectedObjectId: string | null;
   onSelectObject: (id: string | null) => void;
   onMoveObject?: (id: string, position: { x: number; y: number; z: number }) => void;
+  onContextMenuObject?: (id: string, clientX: number, clientY: number) => void;
   amsSlots: AmsSlot[];
   settings: SlicerProcessSettings;
   activeTab: WorkspaceTab;
@@ -55,6 +60,7 @@ export const BuildPlateViewport: React.FC<BuildPlateViewportProps> = ({
   selectedObjectId,
   onSelectObject,
   onMoveObject,
+  onContextMenuObject,
   amsSlots,
   settings,
   activeTab,
@@ -71,6 +77,9 @@ export const BuildPlateViewport: React.FC<BuildPlateViewportProps> = ({
   const onMoveObjectRef = useRef(onMoveObject);
   onMoveObjectRef.current = onMoveObject;
 
+  const onContextMenuObjectRef = useRef(onContextMenuObject);
+  onContextMenuObjectRef.current = onContextMenuObject;
+
   const selectedObjectIdRef = useRef<string | null>(selectedObjectId);
   selectedObjectIdRef.current = selectedObjectId;
 
@@ -79,6 +88,10 @@ export const BuildPlateViewport: React.FC<BuildPlateViewportProps> = ({
 
   const activeTabRef = useRef<WorkspaceTab>(activeTab);
   activeTabRef.current = activeTab;
+
+  const printerSpec = getBambuPrinterModelSpec(settings.printerModel);
+  const buildVolumeRef = useRef(printerSpec.buildVolume);
+  buildVolumeRef.current = printerSpec.buildVolume;
 
   const isDraggingRef = useRef<boolean>(false);
   const nodeMapRef = useRef<Map<string, ObjectSceneNodes>>(new Map());
@@ -95,6 +108,11 @@ export const BuildPlateViewport: React.FC<BuildPlateViewportProps> = ({
     camera: THREE.PerspectiveCamera;
     renderer: THREE.WebGLRenderer;
     controls: OrbitControls;
+    subBedMesh: THREE.Mesh;
+    peiMesh: THREE.Mesh;
+    frontTab: THREE.Mesh;
+    volumeLines: THREE.LineSegments;
+    axisGroup: THREE.Group;
     objectsRoot: THREE.Group;
     selectionBoxGroup: THREE.Group;
     layerSlicePlaneMesh: THREE.Group;
@@ -470,19 +488,29 @@ export const BuildPlateViewport: React.FC<BuildPlateViewportProps> = ({
       return null;
     };
 
+    const rightDownPos = new THREE.Vector2();
+
     const onPointerDown = (e: PointerEvent) => {
+      if (e.button === 2) {
+        rightDownPos.set(e.clientX, e.clientY);
+        return;
+      }
       if (e.button !== 0) return;
       pointerDownPos.set(e.clientX, e.clientY);
 
       const hitObjectId = getHitPlateObjectId(e.clientX, e.clientY);
-      // Only initiate plate dragging if the model was ALREADY clicked/selected!
+      // Only initiate plate dragging if the model was ALREADY clicked/selected and not locked!
       if (
         hitObjectId &&
         hitObjectId === selectedObjectIdRef.current &&
         activeTabRef.current === 'prepare'
       ) {
         const targetObj = objectsRef.current.find((o) => o.id === hitObjectId);
-        if (targetObj && raycaster.ray.intersectPlane(buildPlatePlane, planeHitPoint)) {
+        if (
+          targetObj &&
+          !targetObj.locked &&
+          raycaster.ray.intersectPlane(buildPlatePlane, planeHitPoint)
+        ) {
           const currentWorldX = targetObj.position.x;
           const currentWorldZ = -targetObj.position.y;
           activeDrag = {
@@ -511,6 +539,22 @@ export const BuildPlateViewport: React.FC<BuildPlateViewportProps> = ({
       }
     };
 
+    const onContextMenu = (e: MouseEvent) => {
+      e.preventDefault();
+      const rightDist =
+        rightDownPos.x === 0 && rightDownPos.y === 0
+          ? 0
+          : Math.hypot(e.clientX - rightDownPos.x, e.clientY - rightDownPos.y);
+      if (rightDist > 8) return; // User right-dragged to pan camera
+
+      const hitObjectId = getHitPlateObjectId(e.clientX, e.clientY);
+      const targetId = hitObjectId || selectedObjectIdRef.current;
+      if (targetId) {
+        onSelectObjectRef.current(targetId);
+        onContextMenuObjectRef.current?.(targetId, e.clientX, e.clientY);
+      }
+    };
+
     const onPointerMove = (e: PointerEvent) => {
       if (activeDrag) {
         const rect = renderer.domElement.getBoundingClientRect();
@@ -520,15 +564,17 @@ export const BuildPlateViewport: React.FC<BuildPlateViewportProps> = ({
         raycaster.setFromCamera(mouseNdc, camera);
 
         if (raycaster.ray.intersectPlane(buildPlatePlane, planeHitPoint)) {
+          const halfX = Math.max(40, buildVolumeRef.current.x / 2 - 3);
+          const halfY = Math.max(40, buildVolumeRef.current.y / 2 - 3);
           const clampedWorldX = THREE.MathUtils.clamp(
             planeHitPoint.x + activeDrag.offsetX,
-            -125,
-            125
+            -halfX,
+            halfX
           );
           const clampedWorldZ = THREE.MathUtils.clamp(
             planeHitPoint.z + activeDrag.offsetZ,
-            -125,
-            125
+            -halfY,
+            halfY
           );
           const slicerX = Number(clampedWorldX.toFixed(1));
           const slicerY = Number((-clampedWorldZ).toFixed(1));
@@ -624,6 +670,7 @@ export const BuildPlateViewport: React.FC<BuildPlateViewportProps> = ({
     renderer.domElement.addEventListener('pointermove', onPointerMove);
     renderer.domElement.addEventListener('pointerup', endDragOrClick);
     renderer.domElement.addEventListener('pointercancel', endDragOrClick);
+    renderer.domElement.addEventListener('contextmenu', onContextMenu);
 
     const resizeObserver = new ResizeObserver((entries) => {
       for (const entry of entries) {
@@ -646,6 +693,11 @@ export const BuildPlateViewport: React.FC<BuildPlateViewportProps> = ({
       camera,
       renderer,
       controls,
+      subBedMesh,
+      peiMesh,
+      frontTab,
+      volumeLines,
+      axisGroup,
       objectsRoot,
       selectionBoxGroup,
       layerSlicePlaneMesh,
@@ -666,11 +718,30 @@ export const BuildPlateViewport: React.FC<BuildPlateViewportProps> = ({
       renderer.domElement.removeEventListener('pointermove', onPointerMove);
       renderer.domElement.removeEventListener('pointerup', endDragOrClick);
       renderer.domElement.removeEventListener('pointercancel', endDragOrClick);
+      renderer.domElement.removeEventListener('contextmenu', onContextMenu);
       controls.dispose();
       renderer.dispose();
       sceneStateRef.current = null;
     };
   }, []);
+
+  // Dynamically resize 3D build plate & wireframe enclosure volume when printer model changes
+  useEffect(() => {
+    const st = sceneStateRef.current;
+    if (!st) return;
+    const { x, y, z } = printerSpec.buildVolume;
+    const scaleX = x / 256;
+    const scaleY = y / 256;
+    const scaleZ = z / 256;
+
+    st.peiMesh.scale.set(scaleX, 1, scaleY);
+    st.subBedMesh.scale.set((x + 6) / 262, 1, (y + 10) / 266);
+    st.frontTab.position.set(0, -0.8, y / 2 + 4);
+    st.volumeLines.scale.set(scaleX, scaleZ, scaleY);
+    st.volumeLines.position.y = z / 2;
+    st.axisGroup.position.set(-x / 2, 0.2, y / 2);
+    st.requestRender();
+  }, [printerSpec.buildVolume]);
 
   // Trigger camera preset changes smoothly
   useEffect(() => {
@@ -700,7 +771,7 @@ export const BuildPlateViewport: React.FC<BuildPlateViewportProps> = ({
         if (!nodes) continue;
         nodes.objGroup.position.set(obj.position.x, obj.position.z, -obj.position.y);
         nodes.contactDisc.position.set(obj.position.x, 0.03, -obj.position.y);
-        const boundsCheck = validatePlateBounds(obj);
+        const boundsCheck = validatePlateBounds(obj, printerSpec.buildVolume);
         const boxColor = !boundsCheck.valid ? 0xef4444 : 0x10b981;
         if (nodes.boxLines) {
           nodes.boxLines.position.set(
@@ -761,17 +832,30 @@ export const BuildPlateViewport: React.FC<BuildPlateViewportProps> = ({
       );
       objGroup.userData.plateObjectId = obj.id;
 
+      // Soft radial contact shadow disc under each object (offset y = 0.03 to prevent Z-fighting)
+      const dims = getScaledDimensions(obj);
+      const mirrorXSign = obj.mirror?.x ? -1 : 1;
+      const mirrorYSign = obj.mirror?.y ? -1 : 1;
+      const mirrorZSign = obj.mirror?.z ? -1 : 1;
+      const zMirrorOffset = obj.mirror?.z ? dims.z : 0;
+
       // Apply transforms (Slicer X, Y on plate -> Three.js X, -Z; Slicer Z -> Three.js Y)
-      objGroup.position.set(obj.position.x, obj.position.z, -obj.position.y);
-      objGroup.scale.set(obj.scale.x, obj.scale.z, obj.scale.y);
+      objGroup.position.set(
+        obj.position.x,
+        obj.position.z + zMirrorOffset,
+        -obj.position.y
+      );
+      objGroup.scale.set(
+        Math.abs(obj.scale.x) * mirrorXSign,
+        Math.abs(obj.scale.z) * mirrorZSign,
+        Math.abs(obj.scale.y) * mirrorYSign
+      );
       objGroup.rotation.set(
         THREE.MathUtils.degToRad(obj.rotation.x),
         THREE.MathUtils.degToRad(obj.rotation.z),
         THREE.MathUtils.degToRad(obj.rotation.y)
       );
 
-      // Soft radial contact shadow disc under each object (offset y = 0.03 to prevent Z-fighting)
-      const dims = getScaledDimensions(obj);
       const shadowRadius = Math.max(dims.x, dims.y) * 0.62;
       const contactGeom = new THREE.CircleGeometry(shadowRadius, 32);
       contactGeom.rotateX(-Math.PI / 2);
@@ -795,7 +879,7 @@ export const BuildPlateViewport: React.FC<BuildPlateViewportProps> = ({
       };
 
       // Selection or Out-of-bounds bounding box indicator
-      const boundsCheck = validatePlateBounds(obj);
+      const boundsCheck = validatePlateBounds(obj, printerSpec.buildVolume);
       const isSelected = obj.id === selectedObjectId;
 
       if (isSelected || !boundsCheck.valid) {

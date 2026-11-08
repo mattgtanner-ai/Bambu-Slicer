@@ -109,10 +109,41 @@ export interface BuildPlate {
 
 export type BambuCloudRegion = 'global' | 'us' | 'eu' | 'cn';
 
+export type BambuPrinterModelId =
+  | 'Bambu Lab X1 Carbon'
+  | 'Bambu Lab X1E'
+  | 'Bambu Lab X1'
+  | 'Bambu Lab P1S'
+  | 'Bambu Lab P1P'
+  | 'Bambu Lab A1'
+  | 'Bambu Lab A1 mini'
+  | 'Bambu Lab H2D';
+
+export interface BambuPrinterModelSpec {
+  id: BambuPrinterModelId;
+  shortCode: string;
+  series: 'X1 Series' | 'P1 Series' | 'A1 Series' | 'H2 Series';
+  kinematics:
+    | 'CoreXY Enclosed'
+    | 'CoreXY Open-Frame'
+    | 'Cartesian Bed-Slinger'
+    | 'Dual-Nozzle CoreXY Enclosed';
+  buildVolume: { x: number; y: number; z: number };
+  maxNozzleTempC: number;
+  maxBedTempC: number;
+  maxSpeedMmS: number;
+  maxAccelerationMmS2: number;
+  hasMicroLidar: boolean;
+  hasChamberHeater: boolean;
+  amsSupportLabel: string;
+  defaultNozzleMaterial: 'Hardened Steel' | 'Stainless Steel';
+  cameraSpec: string;
+}
+
 export interface BambuBoundPrinter {
   devId: string; // Serial number (e.g. 00M09A351800421)
   name: string;
-  model: 'Bambu Lab X1 Carbon' | 'Bambu Lab P1S' | 'Bambu Lab A1 mini';
+  model: BambuPrinterModelId;
   online: boolean;
   ip: string;
   accessCode: string;
@@ -146,12 +177,20 @@ export interface PlateObject {
   plateId?: number; // 1 to 9 (which build plate this object belongs to, default 1)
   // Dimensions in mm before scale
   baseDims: { x: number; y: number; z: number };
-  // Position on 256x256 plate in mm (center is 0,0)
+  // Position on build plate in mm (center is 0,0)
   position: { x: number; y: number; z: number };
   // Euler rotation in degrees
   rotation: { x: number; y: number; z: number };
   // Uniform or axis scale factor (1.0 = 100%)
   scale: { x: number; y: number; z: number };
+  // Mirror state per axis
+  mirror?: { x: boolean; y: boolean; z: boolean };
+  // Lock position on build plate against accidental dragging
+  locked?: boolean;
+  // Per-object slicer overrides
+  brimOverride?: 'default' | 'enable' | 'disable';
+  infillDensityOverride?: number;
+  wallLoopsOverride?: number;
   triangles: number;
   visible: boolean;
   supportPainting?: boolean;
@@ -161,6 +200,7 @@ export interface PlateObject {
 }
 
 export interface SlicerProcessSettings {
+  printerModel?: BambuPrinterModelId;
   nozzleDiameter: 0.2 | 0.4 | 0.6 | 0.8;
   plateType: 'Textured PEI Plate' | 'Cool Plate' | 'Engineering Plate' | 'High Temp Plate';
   layerHeight: number; // e.g., 0.08, 0.12, 0.16, 0.20, 0.24, 0.28
@@ -180,7 +220,7 @@ export interface SlicerProcessSettings {
   innerWallSpeed: number; // mm/s
   sparseInfillSpeed: number; // mm/s
   travelSpeed: number; // mm/s
-  maxAcceleration: number; // mm/s^2 (Bambu X1C default 10000 - 20000)
+  maxAcceleration: number; // mm/s^2 (Bambu default 10000 - 20000)
   retractionDistanceMm?: number; // Direct-drive extruder retraction distance (mm), e.g. 0.8
   retractionSpeedMmS?: number; // Direct-drive retraction speed (mm/s), e.g. 30
 }
@@ -215,7 +255,7 @@ export interface SliceResult {
 
 export interface PrinterConnectionConfig {
   printerName: string;
-  model: 'Bambu Lab X1 Carbon';
+  model: BambuPrinterModelId;
   serialNumber: string;
   lanIp: string;
   accessCode: string;

@@ -549,6 +549,116 @@ test('calculateAllPlatesSliceResult and buildPrintQueueFromPlates slice multiple
   assert.equal(queue[2].plateId, 3);
 });
 
+test('BAMBU_PRINTER_MODELS_CATALOG includes all 8 known Bambu Lab printer models and adapts plate bounds', async () => {
+  const {
+    BAMBU_PRINTER_MODELS_CATALOG,
+    getBambuPrinterModelSpec,
+  } = await import('./slicerEngine');
 
+  const expectedModels = [
+    'Bambu Lab X1 Carbon',
+    'Bambu Lab X1E',
+    'Bambu Lab X1',
+    'Bambu Lab P1S',
+    'Bambu Lab P1P',
+    'Bambu Lab A1',
+    'Bambu Lab A1 mini',
+    'Bambu Lab H2D',
+  ];
 
+  assert.equal(BAMBU_PRINTER_MODELS_CATALOG.length, 8);
+  for (const modelName of expectedModels) {
+    const found = BAMBU_PRINTER_MODELS_CATALOG.find((m) => m.id === modelName);
+    assert.ok(found, `Missing printer model ${modelName}`);
+  }
 
+  const a1MiniSpec = getBambuPrinterModelSpec('Bambu Lab A1 mini');
+  assert.deepEqual(a1MiniSpec.buildVolume, { x: 180, y: 180, z: 180 });
+  assert.equal(a1MiniSpec.maxBedTempC, 80);
+
+  const h2dSpec = getBambuPrinterModelSpec('Bambu Lab H2D');
+  assert.deepEqual(h2dSpec.buildVolume, { x: 350, y: 320, z: 325 });
+  assert.equal(h2dSpec.maxNozzleTempC, 350);
+
+  // A 220mm wide part fits on X1C (256mm) and H2D (350mm), but exceeds A1 mini (180mm)
+  const widePart: PlateObject = {
+    id: 'wide-1',
+    name: 'Wide_Gantry_Plate.3mf',
+    sourceFormat: '3MF',
+    presetType: 'bambu_scraper',
+    amsSlotId: 1,
+    baseDims: { x: 220, y: 120, z: 25 },
+    position: { x: 0, y: 0, z: 0 },
+    rotation: { x: 0, y: 0, z: 0 },
+    scale: { x: 1, y: 1, z: 1 },
+    triangles: 2400,
+    visible: true,
+  };
+
+  assert.equal(validatePlateBounds(widePart, a1MiniSpec.buildVolume).valid, false);
+  assert.equal(
+    validatePlateBounds(widePart, getBambuPrinterModelSpec('Bambu Lab X1 Carbon').buildVolume).valid,
+    true
+  );
+  assert.equal(validatePlateBounds(widePart, h2dSpec.buildVolume).valid, true);
+});
+
+test('mirrorPlateObject, clonePlateObjectMulti, fillPlateWithObjectCopies, and per-object overrides work accurately', async () => {
+  const {
+    centerPlateObject,
+    clonePlateObjectMulti,
+    fillPlateWithObjectCopies,
+    mirrorPlateObject,
+    resetPlateObjectTransform,
+  } = await import('./slicerEngine');
+
+  const baseObj: PlateObject = {
+    id: 'obj-ctx-1',
+    name: 'Bench_Part.3mf',
+    sourceFormat: '3MF',
+    presetType: 'benchy_hull',
+    amsSlotId: 1,
+    plateId: 1,
+    baseDims: { x: 60, y: 31, z: 48 },
+    position: { x: -35, y: 20, z: 0 },
+    rotation: { x: 0, y: 0, z: 45 },
+    scale: { x: 1.5, y: 1.5, z: 1.5 },
+    triangles: 22560,
+    visible: true,
+  };
+
+  // Mirror X and Z toggles
+  const mirroredX = mirrorPlateObject(baseObj, 'x');
+  assert.deepEqual(mirroredX.mirror, { x: true, y: false, z: false });
+  const mirroredXZ = mirrorPlateObject(mirroredX, 'z');
+  assert.deepEqual(mirroredXZ.mirror, { x: true, y: false, z: true });
+  const unmirroredX = mirrorPlateObject(mirroredXZ, 'x');
+  assert.deepEqual(unmirroredX.mirror, { x: false, y: false, z: true });
+
+  // Center & Reset transform
+  const centered = centerPlateObject(mirroredXZ);
+  assert.deepEqual(centered.position, { x: 0, y: 0, z: 0 });
+  const reset = resetPlateObjectTransform(mirroredXZ);
+  assert.deepEqual(reset.scale, { x: 1, y: 1, z: 1 });
+  assert.deepEqual(reset.rotation, { x: 0, y: 0, z: 0 });
+  assert.deepEqual(reset.mirror, { x: false, y: false, z: false });
+
+  // Multi-clone (+2 copies -> total 3 objects)
+  const multiCloneRes = clonePlateObjectMulti(reset, [reset], 2);
+  assert.equal(multiCloneRes.objects.length, 3);
+  assert.ok(multiCloneRes.lastCreatedId.includes('obj-ctx-1-copy-'));
+
+  // Fill plate with copies (adds up to 9 arranged objects)
+  const fillRes = fillPlateWithObjectCopies(reset, [reset]);
+  assert.ok(fillRes.objects.length > 2 && fillRes.objects.length <= 9);
+  assert.ok(fillRes.copiesAdded >= 2);
+
+  // Per-object infill override affects slice filament weight
+  const defaultSlice = calculateSliceResult([reset], MOCK_SETTINGS, MOCK_AMS);
+  const solidOverrideSlice = calculateSliceResult(
+    [{ ...reset, infillDensityOverride: 100 }],
+    MOCK_SETTINGS,
+    MOCK_AMS
+  );
+  assert.ok(solidOverrideSlice.totalFilamentGrams > defaultSlice.totalFilamentGrams);
+});

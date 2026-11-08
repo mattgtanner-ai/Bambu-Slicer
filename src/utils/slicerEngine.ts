@@ -6,6 +6,8 @@ import type {
   BambuAccountProfile,
   BambuBoundPrinter,
   BambuCloudRegion,
+  BambuPrinterModelId,
+  BambuPrinterModelSpec,
   BuildPlate,
   CustomMeshGeometry,
   FilamentProfile,
@@ -25,6 +27,146 @@ export const BAMBU_X1C_PLATE_SIZE = {
   y: 256,
   z: 256,
 };
+
+export const BAMBU_PRINTER_MODELS_CATALOG: BambuPrinterModelSpec[] = [
+  {
+    id: 'Bambu Lab X1 Carbon',
+    shortCode: 'BBL X1C',
+    series: 'X1 Series',
+    kinematics: 'CoreXY Enclosed',
+    buildVolume: { x: 256, y: 256, z: 256 },
+    maxNozzleTempC: 300,
+    maxBedTempC: 120,
+    maxSpeedMmS: 500,
+    maxAccelerationMmS2: 20000,
+    hasMicroLidar: true,
+    hasChamberHeater: false,
+    amsSupportLabel: 'AMS / AMS 2 Pro (up to 4 units · 16 colors)',
+    defaultNozzleMaterial: 'Hardened Steel',
+    cameraSpec: '1080p Chamber Cam + AI Spaghetti Guard',
+  },
+  {
+    id: 'Bambu Lab X1E',
+    shortCode: 'BBL X1E',
+    series: 'X1 Series',
+    kinematics: 'CoreXY Enclosed',
+    buildVolume: { x: 256, y: 256, z: 256 },
+    maxNozzleTempC: 320,
+    maxBedTempC: 120,
+    maxSpeedMmS: 500,
+    maxAccelerationMmS2: 20000,
+    hasMicroLidar: true,
+    hasChamberHeater: true,
+    amsSupportLabel: 'AMS / AMS HT (up to 4 units · 16 colors)',
+    defaultNozzleMaterial: 'Hardened Steel',
+    cameraSpec: '1080p Chamber Cam + 60°C Active Heated Chamber',
+  },
+  {
+    id: 'Bambu Lab X1',
+    shortCode: 'BBL X1',
+    series: 'X1 Series',
+    kinematics: 'CoreXY Enclosed',
+    buildVolume: { x: 256, y: 256, z: 256 },
+    maxNozzleTempC: 300,
+    maxBedTempC: 120,
+    maxSpeedMmS: 500,
+    maxAccelerationMmS2: 20000,
+    hasMicroLidar: true,
+    hasChamberHeater: false,
+    amsSupportLabel: 'AMS (up to 4 units · 16 colors)',
+    defaultNozzleMaterial: 'Stainless Steel',
+    cameraSpec: '1080p Chamber Cam + Micro-LiDAR',
+  },
+  {
+    id: 'Bambu Lab P1S',
+    shortCode: 'BBL P1S',
+    series: 'P1 Series',
+    kinematics: 'CoreXY Enclosed',
+    buildVolume: { x: 256, y: 256, z: 256 },
+    maxNozzleTempC: 300,
+    maxBedTempC: 100,
+    maxSpeedMmS: 500,
+    maxAccelerationMmS2: 20000,
+    hasMicroLidar: false,
+    hasChamberHeater: false,
+    amsSupportLabel: 'AMS (up to 4 units · 16 colors)',
+    defaultNozzleMaterial: 'Stainless Steel',
+    cameraSpec: '720p Chamber Cam + Aux Part Cooling',
+  },
+  {
+    id: 'Bambu Lab P1P',
+    shortCode: 'BBL P1P',
+    series: 'P1 Series',
+    kinematics: 'CoreXY Open-Frame',
+    buildVolume: { x: 256, y: 256, z: 256 },
+    maxNozzleTempC: 300,
+    maxBedTempC: 100,
+    maxSpeedMmS: 500,
+    maxAccelerationMmS2: 20000,
+    hasMicroLidar: false,
+    hasChamberHeater: false,
+    amsSupportLabel: 'AMS (up to 4 units · 16 colors)',
+    defaultNozzleMaterial: 'Stainless Steel',
+    cameraSpec: '720p Chamber Cam (Open Frame)',
+  },
+  {
+    id: 'Bambu Lab A1',
+    shortCode: 'BBL A1',
+    series: 'A1 Series',
+    kinematics: 'Cartesian Bed-Slinger',
+    buildVolume: { x: 256, y: 256, z: 256 },
+    maxNozzleTempC: 300,
+    maxBedTempC: 100,
+    maxSpeedMmS: 500,
+    maxAccelerationMmS2: 10000,
+    hasMicroLidar: false,
+    hasChamberHeater: false,
+    amsSupportLabel: 'AMS lite (4-color Active Flow Rate)',
+    defaultNozzleMaterial: 'Stainless Steel',
+    cameraSpec: '1080p Nozzle-View Cam + Eddy Current Flow Sensor',
+  },
+  {
+    id: 'Bambu Lab A1 mini',
+    shortCode: 'BBL A1M',
+    series: 'A1 Series',
+    kinematics: 'Cartesian Bed-Slinger',
+    buildVolume: { x: 180, y: 180, z: 180 },
+    maxNozzleTempC: 300,
+    maxBedTempC: 80,
+    maxSpeedMmS: 500,
+    maxAccelerationMmS2: 10000,
+    hasMicroLidar: false,
+    hasChamberHeater: false,
+    amsSupportLabel: 'AMS lite (4-color Active Flow Rate)',
+    defaultNozzleMaterial: 'Stainless Steel',
+    cameraSpec: '1080p Bed-View Cam + Eddy Current Flow Sensor',
+  },
+  {
+    id: 'Bambu Lab H2D',
+    shortCode: 'BBL H2D',
+    series: 'H2 Series',
+    kinematics: 'Dual-Nozzle CoreXY Enclosed',
+    buildVolume: { x: 350, y: 320, z: 325 },
+    maxNozzleTempC: 350,
+    maxBedTempC: 120,
+    maxSpeedMmS: 600,
+    maxAccelerationMmS2: 20000,
+    hasMicroLidar: true,
+    hasChamberHeater: true,
+    amsSupportLabel: 'AMS 2 Pro / AMS HT (Dual Hotend · up to 24 colors)',
+    defaultNozzleMaterial: 'Hardened Steel',
+    cameraSpec: 'Dual 1080p AI Vision + 65°C Active Chamber',
+  },
+];
+
+export function getBambuPrinterModelSpec(
+  model?: BambuPrinterModelId | string
+): BambuPrinterModelSpec {
+  return (
+    BAMBU_PRINTER_MODELS_CATALOG.find((m) => m.id === model) ||
+    BAMBU_PRINTER_MODELS_CATALOG[0]
+  );
+}
 
 export const MIN_PLATES_COUNT = 1;
 export const MAX_PLATES_COUNT = 9;
@@ -301,9 +443,127 @@ export function formatDuration(totalSeconds: number): string {
 
 export function getScaledDimensions(obj: PlateObject): { x: number; y: number; z: number } {
   return {
-    x: Number((obj.baseDims.x * obj.scale.x).toFixed(2)),
-    y: Number((obj.baseDims.y * obj.scale.y).toFixed(2)),
-    z: Number((obj.baseDims.z * obj.scale.z).toFixed(2)),
+    x: Number((obj.baseDims.x * Math.abs(obj.scale.x)).toFixed(2)),
+    y: Number((obj.baseDims.y * Math.abs(obj.scale.y)).toFixed(2)),
+    z: Number((obj.baseDims.z * Math.abs(obj.scale.z)).toFixed(2)),
+  };
+}
+
+export function mirrorPlateObject(
+  obj: PlateObject,
+  axis: 'x' | 'y' | 'z'
+): PlateObject {
+  const current = obj.mirror || { x: false, y: false, z: false };
+  return {
+    ...obj,
+    mirror: {
+      ...current,
+      [axis]: !current[axis],
+    },
+  };
+}
+
+export function centerPlateObject(obj: PlateObject): PlateObject {
+  return {
+    ...obj,
+    position: {
+      x: 0,
+      y: 0,
+      z: 0,
+    },
+  };
+}
+
+export function resetPlateObjectTransform(obj: PlateObject): PlateObject {
+  return {
+    ...obj,
+    position: {
+      ...obj.position,
+      z: 0,
+    },
+    rotation: { x: 0, y: 0, z: 0 },
+    scale: { x: 1, y: 1, z: 1 },
+    mirror: { x: false, y: false, z: false },
+  };
+}
+
+export function clonePlateObjectMulti(
+  source: PlateObject,
+  allObjects: PlateObject[],
+  copiesCount: number,
+  plateSize = BAMBU_X1C_PLATE_SIZE
+): { objects: PlateObject[]; lastCreatedId: string } {
+  const clampedCount = Math.max(1, Math.min(8, Math.round(copiesCount)));
+  const targetPlateId = source.plateId ?? 1;
+  const now = Date.now();
+  const newClones: PlateObject[] = [];
+
+  for (let i = 0; i < clampedCount; i++) {
+    const copyId = `${source.id}-copy-${now}-${i + 1}`;
+    newClones.push({
+      ...source,
+      id: copyId,
+      name: source.name.replace(
+        /\.(3mf|stl)$/i,
+        clampedCount > 1 ? `_Copy${i + 1}.$1` : '_Copy.$1'
+      ),
+      locked: false,
+      position: {
+        x: source.position.x + 20 * (i + 1),
+        y: source.position.y + 20 * (i + 1),
+        z: 0,
+      },
+    });
+  }
+
+  const plateObjs = allObjects.filter((o) => (o.plateId ?? 1) === targetPlateId);
+  const otherObjs = allObjects.filter((o) => (o.plateId ?? 1) !== targetPlateId);
+  const arranged = autoArrangeObjectsOnPlate(
+    [...plateObjs, ...newClones],
+    plateSize
+  );
+
+  return {
+    objects: [...otherObjs, ...arranged],
+    lastCreatedId: newClones[newClones.length - 1].id,
+  };
+}
+
+export function fillPlateWithObjectCopies(
+  source: PlateObject,
+  allObjects: PlateObject[],
+  plateSize = BAMBU_X1C_PLATE_SIZE,
+  spacingMm = 14
+): { objects: PlateObject[]; copiesAdded: number } {
+  const targetPlateId = source.plateId ?? 1;
+  const plateObjs = allObjects.filter((o) => (o.plateId ?? 1) === targetPlateId);
+  const otherObjs = allObjects.filter((o) => (o.plateId ?? 1) !== targetPlateId);
+
+  const dims = getScaledDimensions(source);
+  const usableX = Math.max(40, plateSize.x - 24);
+  const usableY = Math.max(40, plateSize.y - 24);
+  const maxCols = Math.max(1, Math.floor((usableX + spacingMm) / (dims.x + spacingMm)));
+  const maxRows = Math.max(1, Math.floor((usableY + spacingMm) / (dims.y + spacingMm)));
+  const maxCapacity = Math.min(9, maxCols * maxRows);
+
+  const copiesNeeded = Math.max(1, maxCapacity - plateObjs.length);
+  const now = Date.now();
+  const added: PlateObject[] = [];
+
+  for (let i = 0; i < copiesNeeded; i++) {
+    added.push({
+      ...source,
+      id: `${source.id}-fill-${now}-${i + 1}`,
+      name: source.name.replace(/\.(3mf|stl)$/i, `_Fill${i + 1}.$1`),
+      locked: false,
+      position: { x: 0, y: 0, z: 0 },
+    });
+  }
+
+  const arranged = autoArrangeObjectsOnPlate([...plateObjs, ...added], plateSize, spacingMm);
+  return {
+    objects: [...otherObjs, ...arranged],
+    copiesAdded: added.length,
   };
 }
 
@@ -452,7 +712,17 @@ export function calculateSliceResult(
     const solidModelVolume = rawBoxVolume * 0.46;
     const surfaceArea = 2 * (dims.x * dims.y + dims.x * dims.z + dims.y * dims.z) * 0.72;
 
-    const wallThickness = settings.wallLoops * settings.nozzleDiameter;
+    const effectiveWallLoops = obj.wallLoopsOverride ?? settings.wallLoops;
+    const effectiveInfillDensity =
+      obj.infillDensityOverride !== undefined
+        ? obj.infillDensityOverride
+        : settings.infillDensity;
+    const effectiveSupportEnabled =
+      obj.supportPainting !== undefined
+        ? obj.supportPainting
+        : settings.supportEnabled;
+
+    const wallThickness = effectiveWallLoops * settings.nozzleDiameter;
     const shellVol = Math.min(solidModelVolume * 0.65, surfaceArea * wallThickness * 0.68);
     const topBottomThickness =
       (settings.topShellLayers + settings.bottomShellLayers) * effectiveLayerHeight;
@@ -461,9 +731,9 @@ export function calculateSliceResult(
       dims.x * dims.y * topBottomThickness * 0.55
     );
     const remainingCoreVol = Math.max(0, solidModelVolume - shellVol - topBottomVol);
-    const infillVol = remainingCoreVol * (settings.infillDensity / 100);
+    const infillVol = remainingCoreVol * (effectiveInfillDensity / 100);
 
-    const supportVol = settings.supportEnabled
+    const supportVol = effectiveSupportEnabled
       ? solidModelVolume * (settings.supportType.startsWith('tree') ? 0.09 : 0.14)
       : 0;
 
@@ -579,19 +849,22 @@ export function calculateSliceResult(
     settings.retractionDistanceMm ?? primarySlot?.retractionDistanceMm ?? 0.8;
   const retractionSpeed = settings.retractionSpeedMmS ?? 30;
 
+  const printerSpec = getBambuPrinterModelSpec(settings.printerModel);
   const gcodePreviewLines = [
-    `; CarbonSlice X1 — Bambu Lab X1 Carbon (${settings.nozzleDiameter}mm Nozzle)`,
+    `; CarbonSlice X1 — ${printerSpec.id} (${settings.nozzleDiameter}mm Nozzle | ${printerSpec.buildVolume.x}x${printerSpec.buildVolume.y}x${printerSpec.buildVolume.z}mm)`,
     `; Plate: ${settings.plateType} | Layer: ${settings.layerHeight}mm (${totalLayers} Layers)`,
     `; Filament: ${primarySlot?.material || 'PLA'} (${totalFilamentGrams}g / ${totalFilamentMeters}m) | Est: ${formatDuration(totalTimeSeconds)}`,
     `; Profile Params: Nozzle ${nozzleTemp}°C | Bed ${bedTemp}°C | Speed ${settings.outerWallSpeed}mm/s | Retract ${retractionDist.toFixed(2)}mm`,
-    `M1002 gcode_claim_action : 2 ; Bambu X1C LCD stage: Heating`,
-    `M140 S${bedTemp} ; Set Textured PEI Bed target temperature`,
+    `M1002 gcode_claim_action : 2 ; ${printerSpec.shortCode} LCD stage: Heating`,
+    `M140 S${bedTemp} ; Set ${settings.plateType} target temperature`,
     `M104 S140 ; Standby nozzle preheat prior to auto-bed leveling`,
-    `G28 ; Home X/Y/Z axes on CoreXY gantry`,
-    `G29.2 S1 ; Enable Bambu Micro-LiDAR & Eddy Current bed mesh compensation`,
+    `G28 ; Home X/Y/Z axes (${printerSpec.kinematics})`,
+    printerSpec.hasMicroLidar
+      ? `G29.2 S1 ; Enable Bambu Micro-LiDAR & Eddy Current bed mesh compensation`
+      : `G29 ; Auto-Bed Leveling & Eddy Current Flow Dynamics compensation`,
     `M109 S${nozzleTemp} ; Heat nozzle to profile temperature (${nozzleTemp}°C)`,
     `M207 S${retractionDist.toFixed(2)} F${Math.round(retractionSpeed * 60)} ; Direct-drive retraction length & speed`,
-    `M900 K${primarySlot?.kFactor.toFixed(3) || '0.020'} ; Apply LiDAR Flow Dynamics K-factor`,
+    `M900 K${primarySlot?.kFactor.toFixed(3) || '0.020'} ; Apply Flow Dynamics K-factor`,
     `G1 Z${settings.initialLayerHeight.toFixed(2)} F1200 ; Move to Initial Layer 1`,
     `G1 X45.00 Y18.00 E4.20 F1500 ; Front purge line extrusion`,
     `; --- LAYER 1 / ${totalLayers} (Z = ${settings.initialLayerHeight.toFixed(2)}mm) ---`,

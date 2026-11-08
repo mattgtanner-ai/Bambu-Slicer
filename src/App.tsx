@@ -26,6 +26,7 @@ import type {
   AlertRule,
   AmsSlot,
   BambuAccountProfile,
+  BambuPrinterModelId,
   BuildPlate,
   CameraPreset,
   FilamentProfile,
@@ -46,19 +47,25 @@ import {
   buildTimelapseMetadataOnCompletion,
   calculateAllPlatesSliceResult,
   calculateSliceResult,
+  centerPlateObject,
   clampPlateCount,
+  clonePlateObjectMulti,
   DEFAULT_BAMBU_ACCOUNT,
   DEFAULT_BUILD_PLATES,
   DEFAULT_FILAMENT_PROFILES,
   detectPlatesFrom3MFBuffer,
   evaluatePrinterAlerts,
+  fillPlateWithObjectCopies,
   formatDuration,
   generateMultiPlateSample3MF,
+  getBambuPrinterModelSpec,
   getScaledDimensions,
   MAX_PLATES_COUNT,
+  mirrorPlateObject,
   normalizeAndMeasurePositions,
   parse3MFBuffer,
   parseSTLBuffer,
+  resetPlateObjectTransform,
   simulateBambuCloudDispatch,
   validatePlateBounds,
 } from './utils/slicerEngine';
@@ -79,6 +86,7 @@ import { ChamberCameraCanvas } from './components/ChamberCameraCanvas';
 import { MaterialProfilesView } from './components/MaterialProfilesView';
 import { MeshRepairModal } from './components/MeshRepairModal';
 import { BambuAccountModal } from './components/BambuAccountModal';
+import { PlateObjectContextMenu } from './components/PlateObjectContextMenu';
 
 const INITIAL_AMS_SLOTS: AmsSlot[] = [
   {
@@ -213,6 +221,7 @@ const INITIAL_OBJECTS: PlateObject[] = [
 ];
 
 const INITIAL_SETTINGS: SlicerProcessSettings = {
+  printerModel: 'Bambu Lab X1 Carbon',
   nozzleDiameter: 0.4,
   plateType: 'Textured PEI Plate',
   layerHeight: 0.2,
@@ -327,6 +336,11 @@ export default function App() {
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [autoRepairOnImport, setAutoRepairOnImport] = useState<boolean>(true);
   const [meshRepairModalOpen, setMeshRepairModalOpen] = useState<boolean>(false);
+  const [contextMenuState, setContextMenuState] = useState<{
+    objectId: string;
+    clientX: number;
+    clientY: number;
+  } | null>(null);
 
   const handleSaveFilamentProfile = (profile: FilamentProfile) => {
     setFilamentProfiles((prev) => {
@@ -449,7 +463,7 @@ export default function App() {
   // Wireless Send-to-Printer Modal
   const [sendModalOpen, setSendModalOpen] = useState(false);
 
-  // Bambu X1 Carbon Printer Connection & Live Telemetry
+  // Bambu Printer Connection & Live Telemetry
   const [printerConfig, setPrinterConfig] = useState<PrinterConnectionConfig>({
     printerName: 'Bambu Lab X1C — Studio Bay 01',
     model: 'Bambu Lab X1 Carbon',
@@ -459,6 +473,25 @@ export default function App() {
     connectionMode: 'bambu_lan_mqtt',
     connected: true,
   });
+
+  const activePrinterSpec = useMemo(
+    () => getBambuPrinterModelSpec(settings.printerModel || printerConfig.model),
+    [settings.printerModel, printerConfig.model]
+  );
+
+  const handleSelectPrinterModel = (model: BambuPrinterModelId) => {
+    const spec = getBambuPrinterModelSpec(model);
+    setSettings((prev) => ({
+      ...prev,
+      printerModel: model,
+      maxAcceleration: spec.maxAccelerationMmS2,
+    }));
+    setPrinterConfig((prev) => ({
+      ...prev,
+      model,
+      printerName: `${spec.id} — Studio Bay 01`,
+    }));
+  };
 
   const [telemetry, setTelemetry] = useState<PrinterTelemetry>({
     state: 'PRINTING',
@@ -701,7 +734,10 @@ export default function App() {
     };
     const currentPlateObjs = objects.filter((o) => (o.plateId ?? 1) === activePlateId);
     const otherPlateObjs = objects.filter((o) => (o.plateId ?? 1) !== activePlateId);
-    const arranged = autoArrangeObjectsOnPlate([...currentPlateObjs, newObj]);
+    const arranged = autoArrangeObjectsOnPlate(
+      [...currentPlateObjs, newObj],
+      activePrinterSpec.buildVolume
+    );
     setObjects([...otherPlateObjs, ...arranged]);
     setSelectedObjectId(newId);
   };
@@ -866,7 +902,10 @@ export default function App() {
       skipAutoRepair,
       99
     );
-    const arranged = autoArrangeObjectsOnPlate([...objects, newObj]);
+    const arranged = autoArrangeObjectsOnPlate(
+      [...objects, newObj],
+      activePrinterSpec.buildVolume
+    );
     setObjects(arranged);
     setSelectedObjectId(newObj.id);
     setMeshRepairModalOpen(true);
@@ -949,16 +988,153 @@ export default function App() {
   const handleCloneObject = (objId: string) => {
     const source = objects.find((o) => o.id === objId);
     if (!source) return;
-    const copyId = `${source.id}-copy-${Date.now()}`;
-    const clone: PlateObject = {
-      ...source,
-      id: copyId,
-      name: source.name.replace(/\.(3mf|stl)$/i, '_Copy.$1'),
-      position: { x: source.position.x + 25, y: source.position.y + 25, z: 0 },
+    const { objects: updated, lastCreatedId } = clonePlateObjectMulti(
+      source,
+      objects,
+      1,
+      activePrinterSpec.buildVolume
+    );
+    setObjects(updated);
+    setSelectedObjectId(lastCreatedId);
+  };
+
+  const handleCloneMulti = (objId: string, count: number) => {
+    const source = objects.find((o) => o.id === objId);
+    if (!source) return;
+    const { objects: updated, lastCreatedId } = clonePlateObjectMulti(
+      source,
+      objects,
+      count,
+      activePrinterSpec.buildVolume
+    );
+    setObjects(updated);
+    setSelectedObjectId(lastCreatedId);
+  };
+
+  const handleFillPlateWithCopies = (objId: string) => {
+    const source = objects.find((o) => o.id === objId);
+    if (!source) return;
+    const { objects: updated } = fillPlateWithObjectCopies(
+      source,
+      objects,
+      activePrinterSpec.buildVolume
+    );
+    setObjects(updated);
+  };
+
+  const handleMirrorObject = (objId: string, axis: 'x' | 'y' | 'z') => {
+    setObjects((prev) =>
+      prev.map((obj) => (obj.id === objId ? mirrorPlateObject(obj, axis) : obj))
+    );
+  };
+
+  const handleCenterObject = (objId: string) => {
+    setObjects((prev) =>
+      prev.map((obj) => (obj.id === objId ? centerPlateObject(obj) : obj))
+    );
+  };
+
+  const handleLayFlatObject = (objId: string) => {
+    setObjects((prev) =>
+      prev.map((obj) =>
+        obj.id === objId
+          ? {
+              ...obj,
+              rotation: { x: 0, y: 0, z: obj.rotation.z },
+              position: { ...obj.position, z: 0 },
+            }
+          : obj
+      )
+    );
+  };
+
+  const handleResetTransform = (objId: string) => {
+    setObjects((prev) =>
+      prev.map((obj) =>
+        obj.id === objId ? resetPlateObjectTransform(obj) : obj
+      )
+    );
+  };
+
+  const handleRotateZDelta = (objId: string, deltaDeg: number) => {
+    setObjects((prev) =>
+      prev.map((obj) => {
+        if (obj.id !== objId) return obj;
+        const nextZ = ((obj.rotation.z + deltaDeg) % 360 + 360) % 360;
+        return {
+          ...obj,
+          rotation: {
+            ...obj.rotation,
+            z: nextZ > 180 ? nextZ - 360 : nextZ,
+          },
+        };
+      })
+    );
+  };
+
+  const handleScalePreset = (objId: string, scaleFactor: number) => {
+    const clamped = Math.max(0.1, Math.min(3.5, scaleFactor));
+    setObjects((prev) =>
+      prev.map((obj) =>
+        obj.id === objId
+          ? {
+              ...obj,
+              scale: { x: clamped, y: clamped, z: clamped },
+            }
+          : obj
+      )
+    );
+  };
+
+  const handleUpdateObjectById = (objId: string, patch: Partial<PlateObject>) => {
+    setObjects((prev) =>
+      prev.map((obj) => (obj.id === objId ? { ...obj, ...patch } : obj))
+    );
+  };
+
+  const handleMoveObjectToNewPlate = (objId: string) => {
+    if (plates.length >= MAX_PLATES_COUNT) return;
+    const nextId = Math.max(...plates.map((p) => p.id), 0) + 1;
+    const newPlate: BuildPlate = {
+      id: nextId,
+      name: `Plate ${nextId}`,
+      plateType: settings.plateType,
     };
-    const arranged = autoArrangeObjectsOnPlate([...objects, clone]);
-    setObjects(arranged);
-    setSelectedObjectId(copyId);
+    setPlates((prev) => [...prev, newPlate]);
+    setObjects((prev) =>
+      prev.map((o) =>
+        o.id === objId
+          ? { ...o, plateId: nextId, position: { x: 0, y: 0, z: 0 } }
+          : o
+      )
+    );
+    setActivePlateId(nextId);
+  };
+
+  const handleExportObjectStl = (objId: string) => {
+    const target = objects.find((o) => o.id === objId);
+    if (!target) return;
+    const dims = getScaledDimensions(target);
+    const asciiStl = [
+      `solid ${target.name.replace(/\s+/g, '_')}`,
+      `  facet normal 0 0 1`,
+      `    outer loop`,
+      `      vertex ${(-dims.x / 2).toFixed(2)} ${(-dims.y / 2).toFixed(2)} 0.00`,
+      `      vertex ${(dims.x / 2).toFixed(2)} ${(-dims.y / 2).toFixed(2)} 0.00`,
+      `      vertex 0.00 ${(dims.y / 2).toFixed(2)} ${dims.z.toFixed(2)}`,
+      `    endloop`,
+      `  endfacet`,
+      `endsolid ${target.name.replace(/\s+/g, '_')}`,
+    ].join('\n');
+    const blob = new Blob([asciiStl], { type: 'model/stl' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${target.name.replace(/\.(3mf|stl)$/i, '')}_Exported.stl`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   };
 
   const handleDeleteObject = (objId: string) => {
@@ -1576,6 +1752,7 @@ export default function App() {
                 onUpdateSettings={(patch) =>
                   setSettings((prev) => ({ ...prev, ...patch }))
                 }
+                onSelectPrinterModel={handleSelectPrinterModel}
                 objects={objects}
                 selectedObjectId={selectedObjectId}
                 onSelectObject={(id) => setSelectedObjectId(id)}
@@ -1806,6 +1983,10 @@ export default function App() {
                 selectedObjectId={selectedObjectId}
                 onSelectObject={(id) => setSelectedObjectId(id)}
                 onMoveObject={handleMoveObjectOnPlate}
+                onContextMenuObject={(id, clientX, clientY) => {
+                  setSelectedObjectId(id);
+                  setContextMenuState({ objectId: id, clientX, clientY });
+                }}
                 amsSlots={amsSlots}
                 settings={settings}
                 activeTab={activeTab}
@@ -1818,8 +1999,12 @@ export default function App() {
               />
 
               {/* Minimal Top-Left Spec Readout */}
-              <div className="absolute top-4 left-4 pointer-events-none flex items-center gap-2 text-xs font-mono text-slate-300 bg-[#0f172a] border border-slate-800 px-3 py-1.5 rounded-lg">
-                <span>Bambu Lab X1 Carbon</span>
+              <div
+                data-testid="viewport-printer-spec-badge"
+                className="absolute top-4 left-4 pointer-events-none flex items-center gap-2 text-xs font-mono text-slate-300 bg-[#0f172a] border border-slate-800 px-3 py-1.5 rounded-lg"
+              >
+                <span className="text-emerald-400 font-semibold">{activePrinterSpec.id}</span>
+                <span>({activePrinterSpec.buildVolume.x}×{activePrinterSpec.buildVolume.y}×{activePrinterSpec.buildVolume.z}mm)</span>
                 <span>·</span>
                 <span>
                   Plate {activePlateId} of {plates.length}: {plates.find((p) => p.id === activePlateId)?.name || `Plate ${activePlateId}`}
@@ -2061,7 +2246,12 @@ export default function App() {
                           <button
                             type="button"
                             onClick={() =>
-                              setObjects((prev) => autoArrangeObjectsOnPlate(prev))
+                              setObjects((prev) =>
+                                autoArrangeObjectsOnPlate(
+                                  prev,
+                                  activePrinterSpec.buildVolume
+                                )
+                              )
                             }
                             className="px-2.5 py-1.5 text-xs font-medium text-slate-200 bg-slate-900 hover:bg-slate-800 border border-slate-700 rounded-lg transition-colors whitespace-nowrap shrink-0"
                           >
@@ -2069,21 +2259,39 @@ export default function App() {
                           </button>
 
                           {selectedObject && (
-                            <button
-                              type="button"
-                              onClick={() =>
-                                handleUpdateSelectedObject({
-                                  rotation: { x: 0, y: 0, z: 0 },
-                                  position: {
-                                    ...selectedObject.position,
-                                    z: 0,
-                                  },
-                                })
-                              }
-                              className="px-2.5 py-1.5 text-xs font-medium text-slate-200 bg-slate-900 hover:bg-slate-800 border border-slate-700 rounded-lg transition-colors whitespace-nowrap shrink-0"
-                            >
-                              Lay Flat
-                            </button>
+                            <>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleUpdateSelectedObject({
+                                    rotation: { x: 0, y: 0, z: 0 },
+                                    position: {
+                                      ...selectedObject.position,
+                                      z: 0,
+                                    },
+                                  })
+                                }
+                                className="px-2.5 py-1.5 text-xs font-medium text-slate-200 bg-slate-900 hover:bg-slate-800 border border-slate-700 rounded-lg transition-colors whitespace-nowrap shrink-0"
+                              >
+                                Lay Flat
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  const rect = e.currentTarget.getBoundingClientRect();
+                                  setContextMenuState({
+                                    objectId: selectedObject.id,
+                                    clientX: rect.left,
+                                    clientY: Math.max(20, rect.top - 480),
+                                  });
+                                }}
+                                className="px-2.5 py-1.5 text-xs font-semibold text-emerald-300 bg-emerald-950/50 hover:bg-emerald-900/60 border border-emerald-600/60 rounded-lg transition-colors whitespace-nowrap shrink-0"
+                                title="Right-Click Object Actions (Copy, Mirror, Scale, Overrides)"
+                              >
+                                Object Menu ▾
+                              </button>
+                            </>
                           )}
 
                           <button
@@ -2151,7 +2359,15 @@ export default function App() {
         {activeTab === 'device' && (
           <DeviceMonitorView
             printerConfig={printerConfig}
-            onUpdatePrinterConfig={setPrinterConfig}
+            onUpdatePrinterConfig={(cfg) => {
+              setPrinterConfig(cfg);
+              if (cfg.model !== settings.printerModel) {
+                setSettings((prev) => ({
+                  ...prev,
+                  printerModel: cfg.model,
+                }));
+              }
+            }}
             telemetry={telemetry}
             onUpdateTelemetry={setTelemetry}
             amsSlots={amsSlots}
@@ -2252,16 +2468,59 @@ export default function App() {
         account={bambuAccount}
         onUpdateAccount={setBambuAccount}
         onSelectActivePrinter={(p) => {
+          handleSelectPrinterModel(p.model);
           setPrinterConfig((prev) => ({
             ...prev,
             printerName: p.name,
-            model: p.model as any,
+            model: p.model,
             serialNumber: p.devId,
             lanIp: p.ip,
             accessCode: p.accessCode,
           }));
         }}
       />
+
+      {/* Right-Click Plate Object Context Menu */}
+      {contextMenuState &&
+        (() => {
+          const menuObj = objects.find(
+            (o) => o.id === contextMenuState.objectId
+          );
+          if (!menuObj) return null;
+          return (
+            <PlateObjectContextMenu
+              object={menuObj}
+              clientX={contextMenuState.clientX}
+              clientY={contextMenuState.clientY}
+              amsSlots={amsSlots}
+              plates={plates}
+              activePlateId={activePlateId}
+              settings={settings}
+              onClose={() => setContextMenuState(null)}
+              onCopyObject={handleCloneObject}
+              onCloneMulti={handleCloneMulti}
+              onFillPlateWithCopies={handleFillPlateWithCopies}
+              onMirrorObject={handleMirrorObject}
+              onCenterObject={handleCenterObject}
+              onLayFlatObject={handleLayFlatObject}
+              onResetTransform={handleResetTransform}
+              onRotateZDelta={handleRotateZDelta}
+              onScalePreset={handleScalePreset}
+              onAssignAmsSlot={(objId, slotId) =>
+                handleUpdateObjectById(objId, { amsSlotId: slotId })
+              }
+              onUpdateObjectPatch={handleUpdateObjectById}
+              onMoveToPlate={handleMoveObjectToPlate}
+              onMoveToNewPlate={handleMoveObjectToNewPlate}
+              onOpenMeshRepair={(objId) => {
+                setSelectedObjectId(objId);
+                setMeshRepairModalOpen(true);
+              }}
+              onExportObjectStl={handleExportObjectStl}
+              onDeleteObject={handleDeleteObject}
+            />
+          );
+        })()}
     </div>
   );
 }

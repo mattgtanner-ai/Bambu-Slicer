@@ -24,6 +24,7 @@ import type {
   BambuBoundPrinter,
   BambuCloudRegion,
 } from '../types/slicer';
+import { BAMBU_PRINTER_MODELS_CATALOG } from '../utils/slicerEngine';
 
 interface BambuAccountModalProps {
   isOpen: boolean;
@@ -459,9 +460,11 @@ export const BambuAccountModal: React.FC<BambuAccountModalProps> = ({
                           onChange={(e) => setNewModel(e.target.value as BambuBoundPrinter['model'])}
                           className="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-slate-100"
                         >
-                          <option value="Bambu Lab X1 Carbon">Bambu Lab X1 Carbon</option>
-                          <option value="Bambu Lab P1S">Bambu Lab P1S</option>
-                          <option value="Bambu Lab A1 mini">Bambu Lab A1 mini</option>
+                          {BAMBU_PRINTER_MODELS_CATALOG.map((m) => (
+                            <option key={m.id} value={m.id}>
+                              {m.id} ({m.buildVolume.x}×{m.buildVolume.y}×{m.buildVolume.z}mm)
+                            </option>
+                          ))}
                         </select>
                       </div>
                       <div className="space-y-1">
